@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Folder, ChevronLeft, ChevronRight, Maximize2, X, 
   Home, RefreshCw, Upload, Loader2, Image as ImageIcon,
-  FolderPlus, Trash2, AlertCircle, CheckCircle2
+  FolderPlus, Trash2, AlertCircle, CheckCircle2, Grip
 } from 'lucide-react';
 import { 
   DndContext, PointerSensor, useSensor, useSensors, 
@@ -45,24 +45,17 @@ const DraggablePhoto = ({ photo, idx, onZoom, onDelete }) => {
   });
 
   const style = {
-    // Transformación que no pelea con Framer Motion
     transform: CSS.Translate.toString(transform),
     zIndex: isDragging ? 50 : 1,
     opacity: isDragging ? 0.8 : 1,
-    // CRUCIAL: Evita que Windows/Trackpads cancelen el evento de arrastrar
-    touchAction: 'none', 
   };
 
   return (
     <motion.div
-      // LA MAGIA ESTÁ AQUÍ: Apagamos el layout de Framer Motion solo mientras arrastramos
-      layout={!isDragging} 
+      layout={!isDragging}
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className="group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden cursor-grab active:cursor-grabbing border border-white/5 shadow-xl"
-      onClick={() => onZoom(idx)}
+      className="group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden border border-white/5 shadow-xl"
     >
       <img 
         src={photo.thumb} 
@@ -70,16 +63,39 @@ const DraggablePhoto = ({ photo, idx, onZoom, onDelete }) => {
         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 pointer-events-none" 
         loading="lazy" 
       />
-      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-        <Maximize2 className="text-white pointer-events-none" size={20} />
+      
+      {/* OVERLAY SEPARADO EN ZONAS DE ACCIÓN */}
+      <div 
+        className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 cursor-zoom-in"
+        onClick={() => onZoom(idx)} // Clic en cualquier parte del fondo oscuro hace Zoom
+      >
+        
+        {/* BOTÓN DE AGARRE (DRAG HANDLE) - Exclusivo para mover */}
+        <div 
+          {...attributes}
+          {...listeners}
+          onClick={(e) => e.stopPropagation()} // Evita el zoom al soltar el arrastre
+          className="p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full transition-all shadow-xl cursor-grab active:cursor-grabbing touch-none z-10"
+          title="Mantén presionado para arrastrar la foto"
+        >
+          <Grip size={20} />
+        </div>
+
+        {/* ÍCONO DE ZOOM (Solo visual) */}
+        <div className="p-3 bg-white/20 text-white rounded-full backdrop-blur-sm pointer-events-none">
+          <Maximize2 size={20} />
+        </div>
+
+        {/* BOTÓN PARA BORRAR */}
         <button 
-          // Bloquea que el botón inicie un arrastre por error
           onPointerDown={(e) => e.stopPropagation()} 
           onClick={(e) => { e.stopPropagation(); onDelete(photo); }} 
-          className="p-3 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-full transition-all backdrop-blur-sm shadow-xl z-10"
+          className="p-3 bg-red-600/80 hover:bg-red-600 text-white rounded-full transition-all backdrop-blur-sm shadow-xl z-10"
+          title="Eliminar foto"
         >
           <Trash2 size={20} />
         </button>
+
       </div>
     </motion.div>
   );
@@ -96,14 +112,12 @@ export default function PhotoGallery() {
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [viewingPhotoIndex, setViewingPhotoIndex] = useState(null);
   
-  // Para subida de archivos nativos desde el PC
   const [isDraggingNative, setIsDraggingNative] = useState(false); 
   
   const [modal, setModal] = useState({ show: false, title: '', msg: '', type: 'confirm', onConfirm: null });
   const [toast, setToast] = useState({ show: false, msg: '', type: 'success' });
   const fileInputRef = useRef(null);
 
-  // Sensores robustos: Requiere mover 5px para arrastrar (permite clics normales perfectos)
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -170,7 +184,6 @@ export default function PhotoGallery() {
   const handleDragEnd = (event) => {
     const { active, over } = event;
     
-    // Si soltamos una foto sobre un álbum
     if (over && active.data.current?.type === 'photo' && over.data.current?.type === 'folder') {
       const sourceUrl = active.id;
       const targetAlbumPath = over.id;
