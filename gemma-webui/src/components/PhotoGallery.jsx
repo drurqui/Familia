@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Folder, ChevronLeft, ChevronRight, Maximize2, X, 
   Home, RefreshCw, Upload, Loader2, Image as ImageIcon,
-  FolderPlus, Trash2, AlertCircle, CheckCircle2, Grip
+  FolderPlus, Trash2, AlertCircle, CheckCircle2, CheckSquare
 } from 'lucide-react';
 import { 
   DndContext, PointerSensor, useSensor, useSensors, 
@@ -15,7 +15,7 @@ import { CSS } from '@dnd-kit/utilities';
 
 const DroppableFolder = ({ child, onClick, coverUrl }) => {
   const { isOver, setNodeRef } = useDroppable({
-    id: child.path,
+    id: `folder-${child.path}`,
     data: { type: 'folder', path: child.path }
   });
 
@@ -38,7 +38,53 @@ const DroppableFolder = ({ child, onClick, coverUrl }) => {
   );
 };
 
-const DraggablePhoto = ({ photo, idx, onZoom, onDelete }) => {
+// NUEVO: Botón de "Atrás" que acepta soltar fotos para subirlas de nivel
+const DroppableBackButton = ({ onClick, parentPath }) => {
+  const { isOver, setNodeRef } = useDroppable({
+    id: `back-${parentPath}`,
+    data: { type: 'folder', path: parentPath }
+  });
+
+  return (
+    <button 
+      ref={setNodeRef}
+      onClick={onClick} 
+      title="Arrastra fotos aquí para subirlas un nivel"
+      className={`p-3 rounded-full transition-all flex items-center justify-center ${
+        isOver ? 'bg-blue-500 text-white ring-4 ring-blue-500/30 scale-110' : 'bg-white/5 hover:bg-white/10 text-slate-400'
+      }`}
+    >
+      <ChevronLeft size={24} />
+    </button>
+  );
+};
+
+// NUEVO: Enlaces de navegación que aceptan soltar fotos
+const DroppableBreadcrumb = ({ name, path, onClick, isLast }) => {
+  const { isOver, setNodeRef } = useDroppable({
+    id: `crumb-${path}`,
+    data: { type: 'folder', path: path }
+  });
+
+  if (isLast) {
+    return <span className="text-white px-2 py-1">{name}</span>;
+  }
+
+  return (
+    <button 
+      ref={setNodeRef}
+      onClick={onClick} 
+      title={`Mover fotos a ${name}`}
+      className={`transition-all px-2 py-1 rounded-md font-bold ${
+        isOver ? 'bg-blue-500 text-white shadow-lg scale-110' : 'hover:text-blue-400'
+      }`}
+    >
+      {name}
+    </button>
+  );
+};
+
+const DraggablePhoto = ({ photo, idx, onZoom, onDelete, isSelected, onToggle, selectionCount }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: photo.url,
     data: { type: 'photo', url: photo.url }
@@ -56,8 +102,11 @@ const DraggablePhoto = ({ photo, idx, onZoom, onDelete }) => {
       layout={!isDragging} 
       ref={setNodeRef}
       style={style}
-      className="group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden border border-white/5 shadow-xl"
-      // Quitamos el onClick de Zoom general de aquí para evitar conflictos de dnd-kit
+      {...attributes}
+      {...listeners}
+      className={`group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden shadow-xl cursor-grab active:cursor-grabbing transition-all ${
+        isSelected ? 'border-2 border-blue-500 scale-[0.98]' : 'border border-white/5'
+      }`}
     >
       <img 
         src={photo.thumb} 
@@ -65,42 +114,54 @@ const DraggablePhoto = ({ photo, idx, onZoom, onDelete }) => {
         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 pointer-events-none" 
         loading="lazy" 
       />
+
+      <div 
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); onToggle(photo.url); }}
+        className={`absolute top-3 left-3 z-20 cursor-pointer transition-opacity ${
+          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}
+        title="Seleccionar foto"
+      >
+        {isSelected ? (
+          <div className="bg-blue-500 rounded-md flex items-center justify-center w-7 h-7 shadow-lg">
+            <CheckSquare className="text-white" size={18} />
+          </div>
+        ) : (
+          <div className="w-7 h-7 border-2 border-white/80 rounded-md bg-black/40 hover:bg-black/60 shadow-sm transition-colors" />
+        )}
+      </div>
       
-      {/* OVERLAY CON ÍCONOS DE ACCIÓN INDEPENDIENTES */}
-      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+      <div className={`absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center gap-4 pointer-events-none ${
+        isSelected ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'
+      }`}>
         
-        {/* BOTÓN ESPECÍFICO PARA ZOOM (LUPA BLANCA) */}
         <button
-          onClick={(e) => { e.stopPropagation(); onZoom(idx); }} // Solo hace zoom si clicas aquí
-          className="p-3 bg-white/20 hover:bg-white text-white hover:text-black rounded-full backdrop-blur-sm shadow-xl transition-all cursor-zoom-in z-10"
+          onPointerDown={(e) => e.stopPropagation()} 
+          onClick={(e) => { e.stopPropagation(); onZoom(idx); }} 
+          className="p-3 bg-white/20 hover:bg-white text-white hover:text-black rounded-full backdrop-blur-sm shadow-xl transition-all cursor-zoom-in z-10 pointer-events-auto"
           title="Agrandar foto"
         >
           <Maximize2 size={20} />
         </button>
 
-        {/* BOTÓN ESPECÍFICO PARA ARRASTRAR (AGARRE AZUL) */}
-        <div 
-          {...attributes}
-          {...listeners}
-          // Quitamos StopPropagation de PointerDown para que dnd-kit detecte el arrastre
-          onClick={(e) => e.stopPropagation()} // Evita acciones de fondo al soltar
-          className="p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full transition-all shadow-xl cursor-grab active:cursor-grabbing touch-none z-10"
-          title="Mantén presionado para arrastrar la foto"
-        >
-          <Grip size={20} />
-        </div>
-
-        {/* BOTÓN ESPECÍFICO PARA BORRAR (BASURERO ROJO) */}
         <button 
-          onPointerDown={(e) => e.stopPropagation()} // Importante para dnd-kit sensor
+          onPointerDown={(e) => e.stopPropagation()} 
           onClick={(e) => { e.stopPropagation(); onDelete(photo); }} 
-          className="p-3 bg-red-600/80 hover:bg-red-600 text-white rounded-full transition-all backdrop-blur-sm shadow-xl z-10"
+          className="p-3 bg-red-600/80 hover:bg-red-600 text-white rounded-full transition-all backdrop-blur-sm shadow-xl z-10 pointer-events-auto"
           title="Eliminar foto"
         >
           <Trash2 size={20} />
         </button>
 
       </div>
+
+      {isDragging && selectionCount > 1 && isSelected && (
+        <div className="absolute -top-3 -right-3 bg-blue-500 text-white text-sm font-bold rounded-full w-8 h-8 flex items-center justify-center z-50 shadow-2xl ring-4 ring-zinc-900">
+          {selectionCount}
+        </div>
+      )}
+
     </motion.div>
   );
 };
@@ -116,14 +177,13 @@ export default function PhotoGallery() {
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [viewingPhotoIndex, setViewingPhotoIndex] = useState(null);
   
-  // Para subida de archivos nativos desde el PC
+  const [selectedPhotos, setSelectedPhotos] = useState([]); 
   const [isDraggingNative, setIsDraggingNative] = useState(false); 
   
   const [modal, setModal] = useState({ show: false, title: '', msg: '', type: 'confirm', onConfirm: null });
   const [toast, setToast] = useState({ show: false, msg: '', type: 'success' });
   const fileInputRef = useRef(null);
 
-  // Sensores robustos: Requiere mover 5px para arrastrar (permite clics normales perfectos)
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -139,6 +199,8 @@ export default function PhotoGallery() {
 
   const currentFolder = useMemo(() => history.length > 0 ? history[history.length - 1] : rootFolder, [history, rootFolder]);
   const currentPath = useMemo(() => history.map(f => f.name).join('/'), [history]);
+  // Calculamos la ruta del padre para el botón de retroceso
+  const parentPath = useMemo(() => history.length > 0 ? history.slice(0, -1).map(f => f.name).join('/') : "", [history]);
 
   const loadPhotos = useCallback((isManualRefresh = false) => {
     if (!isManualRefresh) setLoading(true);
@@ -159,6 +221,10 @@ export default function PhotoGallery() {
   }, []);
 
   useEffect(() => { loadPhotos(); }, [loadPhotos]);
+
+  useEffect(() => {
+    setSelectedPhotos([]);
+  }, [currentPath]);
 
   useEffect(() => {
     if (viewingPhotoIndex === null || !currentFolder?.photos?.length) return;
@@ -186,55 +252,54 @@ export default function PhotoGallery() {
     } finally { setRefreshing(false); }
   };
 
+  const toggleSelection = (photoUrl) => {
+    setSelectedPhotos(prev => 
+      prev.includes(photoUrl) ? prev.filter(url => url !== photoUrl) : [...prev, photoUrl]
+    );
+  };
+
   // --- EVENTO PRINCIPAL DE DND-KIT ---
-  const handleDragEnd = (event) => {
+  const handleDragEnd = async (event) => {
     const { active, over } = event;
     
-    // Si soltamos una foto sobre un álbum
+    // Ahora leemos el targetAlbumPath de over.data.current.path en lugar de over.id
     if (over && active.data.current?.type === 'photo' && over.data.current?.type === 'folder') {
-      const sourceUrl = active.id;
-      const targetAlbumPath = over.id;
+      const targetAlbumPath = over.data.current.path;
+      const draggedPhotoUrl = active.id;
       
-      console.log(`Moviendo ${sourceUrl} a ${targetAlbumPath}`);
-      handleMovePhoto(sourceUrl, targetAlbumPath);
+      const photosToMove = selectedPhotos.includes(draggedPhotoUrl) 
+        ? selectedPhotos 
+        : [draggedPhotoUrl];
+
+      await handleMoveMultiple(photosToMove, targetAlbumPath);
     }
   };
 
-  const handleMovePhoto = async (sourceUrl, targetAlbumPath) => {
-    const cleanSourcePath = sourceUrl.split('/media/').pop().replace(/^\/+/, '');
-    
-    try {
-      setRefreshing(true);
-      const res = await fetch('/api/move-photo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourcePath: cleanSourcePath, targetAlbum: targetAlbumPath })
-      });
-      const result = await res.json();
-      
-      if (result.status === "success") {
-        showToast("Foto movida exitosamente");
-        
-        setRootFolder(prev => {
-          const updateFolderTree = (node) => {
-            if (node.path === currentFolder.path) {
-              return { ...node, photos: node.photos.filter(p => p.url !== sourceUrl) };
-            }
-            if (node.children) {
-              return { ...node, children: node.children.map(updateFolderTree) };
-            }
-            return node;
-          };
-          return updateFolderTree(prev);
-        });
+  const handleMoveMultiple = async (photoUrls, targetAlbumPath) => {
+    setRefreshing(true);
+    let successCount = 0;
 
-        triggerManualRefresh();
-      } else {
-        showToast(result.message, "error");
+    for (const url of photoUrls) {
+      const cleanSourcePath = url.split('/media/').pop().replace(/^\/+/, '');
+      try {
+        const res = await fetch('/api/move-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourcePath: cleanSourcePath, targetAlbum: targetAlbumPath })
+        });
+        const result = await res.json();
+        if (result.status === "success") successCount++;
+      } catch (e) {
+        console.error("Fallo al mover:", url, e);
       }
-    } catch (e) { 
-      showToast("Error al mover la foto", "error"); 
-    } finally {
+    }
+
+    if (successCount > 0) {
+      showToast(`${successCount} foto(s) movida(s)`);
+      triggerManualRefresh(); 
+      setSelectedPhotos([]); 
+    } else {
+      showToast("Error al mover fotos", "error");
       setRefreshing(false);
     }
   };
@@ -352,35 +417,68 @@ export default function PhotoGallery() {
         if (e.dataTransfer.files?.length > 0) handleFiles(e.dataTransfer.files);
       }}>
       
-      <div className="max-w-7xl mx-auto">
-        <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <nav className="flex items-center gap-2 text-sm text-slate-500 mb-6 font-medium">
-              <button onClick={() => setHistory([])} className="hover:text-blue-400 transition-colors">Inicio</button>
-              {history.map((f, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="text-slate-800">/</span>
-                  <button onClick={() => setHistory(history.slice(0, i + 1))} className={i === history.length - 1 ? 'text-white' : 'hover:text-blue-400'}>{f.name}</button>
-                </div>
-              ))}
-            </nav>
-            <div className="flex items-center gap-4">
-              {history.length > 0 && <button onClick={() => setHistory(p => p.slice(0, -1))} className="p-3 bg-white/5 hover:bg-white/10 rounded-full text-slate-400 transition-all"><ChevronLeft size={24} /></button>}
-              <h1 className="text-4xl font-black text-white tracking-tight">{currentFolder.name}</h1>
+      {/* CONTEXTO DE ARRASTRE AHORA ENVUELVE LA CABECERA TAMBIÉN */}
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <div className="max-w-7xl mx-auto">
+          <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div>
+              <nav className="flex items-center gap-2 text-sm text-slate-500 mb-6 font-medium">
+                {/* BREADCRUMB INICIAL */}
+                <DroppableBreadcrumb 
+                  name="Inicio" 
+                  path="" 
+                  onClick={() => setHistory([])} 
+                  isLast={history.length === 0} 
+                />
+                
+                {/* BREADCRUMBS DINÁMICOS */}
+                {history.map((f, i) => {
+                  const bPath = history.slice(0, i + 1).map(hf => hf.name).join('/');
+                  return (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-slate-800">/</span>
+                      <DroppableBreadcrumb 
+                        name={f.name} 
+                        path={bPath} 
+                        onClick={() => setHistory(history.slice(0, i + 1))} 
+                        isLast={i === history.length - 1} 
+                      />
+                    </div>
+                  );
+                })}
+              </nav>
+              <div className="flex items-center gap-4">
+                
+                {/* BOTÓN DE ATRÁS (AHORA RECEPTOR DE FOTOS) */}
+                {history.length > 0 && (
+                  <DroppableBackButton 
+                    onClick={() => setHistory(p => p.slice(0, -1))}
+                    parentPath={parentPath}
+                  />
+                )}
+                
+                <h1 className="text-4xl font-black text-white tracking-tight">{currentFolder.name}</h1>
+                
+                {selectedPhotos.length > 0 && (
+                  <button 
+                    onClick={() => setSelectedPhotos([])}
+                    className="ml-4 px-3 py-1 bg-blue-500/20 text-blue-400 text-sm font-bold rounded-lg hover:bg-blue-500 hover:text-white transition-colors shadow-lg"
+                  >
+                    {selectedPhotos.length} seleccionadas (Limpiar)
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="flex gap-3">
-            <input type="file" multiple ref={fileInputRef} onChange={(e) => handleFiles(e.target.files)} className="hidden" accept="image/*" />
-            <button onClick={handleCreateAlbum} className="px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-xl border border-white/5 transition-all">Nuevo Álbum</button>
-            <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg transition-all disabled:opacity-50">
-              {uploading ? `Subiendo ${uploadProgress.current}/${uploadProgress.total}` : "Cargar Fotos"}
-            </button>
-            <button onClick={triggerManualRefresh} className="p-3 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-white transition-all"><RefreshCw className={refreshing ? "animate-spin" : ""} size={22} /></button>
-          </div>
-        </header>
+            <div className="flex gap-3">
+              <input type="file" multiple ref={fileInputRef} onChange={(e) => handleFiles(e.target.files)} className="hidden" accept="image/*" />
+              <button onClick={handleCreateAlbum} className="px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-xl border border-white/5 transition-all shadow-lg">Nuevo Álbum</button>
+              <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg transition-all disabled:opacity-50">
+                {uploading ? `Subiendo ${uploadProgress.current}/${uploadProgress.total}` : "Cargar Fotos"}
+              </button>
+              <button onClick={triggerManualRefresh} className="p-3 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-white transition-all shadow-lg"><RefreshCw className={refreshing ? "animate-spin" : ""} size={22} /></button>
+            </div>
+          </header>
 
-        {/* CONTEXTO DE ARRASTRE DE @DND-KIT */}
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
           <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-6 gap-6">
             
             {/* CARPETAS / ÁLBUMES */}
@@ -401,12 +499,15 @@ export default function PhotoGallery() {
                 idx={idx} 
                 onZoom={setViewingPhotoIndex} 
                 onDelete={handleDeletePhoto} 
+                isSelected={selectedPhotos.includes(photo.url)}
+                onToggle={toggleSelection}
+                selectionCount={selectedPhotos.length}
               />
             ))}
 
           </div>
-        </DndContext>
-      </div>
+        </div>
+      </DndContext>
 
       {/* MODALES Y TOASTS */}
       <AnimatePresence>
