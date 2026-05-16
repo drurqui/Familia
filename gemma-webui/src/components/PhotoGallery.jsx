@@ -267,6 +267,10 @@ export default function PhotoGallery() {
               className="group cursor-pointer bg-zinc-900 rounded-2xl overflow-hidden aspect-4/5 relative border border-white/5 shadow-2xl hover:border-blue-500/50 transition-colors"
               
               /* EVENTOS PARA RECIBIR LA FOTO SOLTADA */
+              onDragEnter={(e) => {
+                e.preventDefault(); // <-- ESTO FALTABA PARA QUE EL NAVEGADOR ACEPTE EL DROP
+                e.stopPropagation();
+              }}
               onDragOver={(e) => {
                 e.preventDefault(); 
                 e.stopPropagation(); 
@@ -277,8 +281,16 @@ export default function PhotoGallery() {
                 setIsDragging(false);
                 
                 const draggedPhotoUrl = e.dataTransfer.getData('text/plain');
+                
+                // DEPURACIÓN: Verificamos en consola qué estamos soltando
+                console.log("Soltando archivo...");
+                console.log("Origen URL:", draggedPhotoUrl);
+                console.log("Destino Carpeta:", child.path);
+                
                 if (draggedPhotoUrl) {
                   handleMovePhoto(draggedPhotoUrl, child.path);
+                } else {
+                  console.error("No se pudo leer la ruta de la foto arrastrada.");
                 }
               }}
             >
@@ -302,7 +314,7 @@ export default function PhotoGallery() {
               /* EVENTOS PARA ARRASTRAR */
               draggable={true}
               onDragStart={(e) => {
-                e.stopPropagation(); 
+                console.log("Agarrando foto:", photo.url); // DEPURACIÓN
                 e.dataTransfer.setData('text/plain', photo.url);
                 e.dataTransfer.effectAllowed = 'move';
               }}
