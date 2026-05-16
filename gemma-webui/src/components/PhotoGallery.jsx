@@ -48,9 +48,7 @@ export default function PhotoGallery() {
 
   useEffect(() => { loadPhotos(); }, [loadPhotos]);
 
-  // Navegación con teclado para el visor de fotos
   useEffect(() => {
-    // Si no estamos viendo ninguna foto, no hacemos nada
     if (viewingPhotoIndex === null || !currentFolder?.photos?.length) return;
 
     const handleKeyDown = (e) => {
@@ -64,8 +62,6 @@ export default function PhotoGallery() {
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    
-    // Limpiamos el event listener cuando el componente se desmonta o cambia la dependencia
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [viewingPhotoIndex, currentFolder]);
 
@@ -77,6 +73,49 @@ export default function PhotoGallery() {
       if (data.status === "success") loadPhotos(true);
     } finally { setRefreshing(false); }
   };
+
+  // --- NUEVA FUNCIÓN PARA MOVER FOTOS ---
+  const handleMovePhoto = async (sourceUrl, targetAlbumPath) => {
+    const cleanSourcePath = sourceUrl.split('/media/').pop().replace(/^\/+/, '');
+    
+    try {
+      setRefreshing(true);
+      // Nota: Asumo que en tu Vite config/Nginx mapearás /api/move-photo hacia urquilla-move.py
+      const res = await fetch('/api/move-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourcePath: cleanSourcePath, targetAlbum: targetAlbumPath })
+      });
+      const result = await res.json();
+      
+      if (result.status === "success") {
+        showToast("Foto movida exitosamente");
+        
+        // Actualización optimista de la UI
+        setRootFolder(prev => {
+          const updateFolderTree = (node) => {
+            if (node.path === currentFolder.path) {
+              return { ...node, photos: node.photos.filter(p => p.url !== sourceUrl) };
+            }
+            if (node.children) {
+              return { ...node, children: node.children.map(updateFolderTree) };
+            }
+            return node;
+          };
+          return updateFolderTree(prev);
+        });
+
+        triggerManualRefresh();
+      } else {
+        showToast(result.message, "error");
+      }
+    } catch (e) { 
+      showToast("Error al mover la foto", "error"); 
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  // ---------------------------------------
 
   const handleFiles = async (files) => {
     if (!files?.length) return;
@@ -101,7 +140,6 @@ export default function PhotoGallery() {
   };
 
   const handleDeletePhoto = (photo) => {
-    // Limpieza agresiva de ruta para el backend
     const cleanPath = photo.url.split('/media/').pop().replace(/^\/+/, '');
     
     setModal({
@@ -120,8 +158,6 @@ export default function PhotoGallery() {
           
           if (result.status === "success") {
             showToast("Foto eliminada");
-            
-            // ACTUALIZACIÓN OPTIMISTA (Reacomodo inmediato en UI)
             setRootFolder(prev => {
               const updateFolderTree = (node) => {
                 if (node.path === currentFolder.path) {
@@ -134,11 +170,10 @@ export default function PhotoGallery() {
               };
               return updateFolderTree(prev);
             });
-            
             triggerManualRefresh();
           } else {
             showToast(result.message, "error");
-            triggerManualRefresh(); // Refrescar por si el archivo ya no existía
+            triggerManualRefresh();
           }
         } catch (e) { showToast("Error de conexión", "error"); }
         setModal(p => ({ ...p, show: false }));
@@ -188,7 +223,14 @@ export default function PhotoGallery() {
   return (
     <div className={`p-8 h-full overflow-y-auto custom-scrollbar ${isDragging ? 'bg-blue-500/5' : ''}`}
       onDragOver={(e) => {e.preventDefault(); setIsDragging(true);}} onDragLeave={() => setIsDragging(false)}
-      onDrop={(e) => {e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files);}}>
+      onDrop={(e) => {
+        e.preventDefault(); 
+        setIsDragging(false); 
+        // Si hay archivos desde el OS (subida normal)
+        if (e.dataTransfer.files?.length > 0) {
+          handleFiles(e.dataTransfer.files);
+        }
+      }}>
       
       <div className="max-w-7xl mx-auto">
         <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -218,21 +260,59 @@ export default function PhotoGallery() {
         </header>
 
         <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-6 gap-6">
+          {/* CARPETAS / ÁLBUMES (Receptores de Drag & Drop) */}
           {currentFolder.children?.map(child => (
-            <motion.div key={child.path} whileHover={{ y: -5 }} onClick={() => setHistory(p => [...p, child])} className="group cursor-pointer bg-zinc-900 rounded-2xl overflow-hidden aspect-4/5 relative border border-white/5 shadow-2xl">
+            <motion.div 
+              key={child.path} 
+              whileHover={{ y: -5 }} 
+              onClick={() => setHistory(p => [...p, child])} 
+              className="group cursor-pointer bg-zinc-900 rounded-2xl overflow-hidden aspect-4/5 relative border border-white/5 shadow-2xl hover:border-blue-500/50 transition-colors"
+              
+              /* EVENTOS PARA RECIBIR LA FOTO SOLTADA */
+              onDragOver={(e) => {
+                e.preventDefault(); // Permitir soltar
+                e.stopPropagation(); // Evitar que burbujee al contenedor padre
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragging(false);
+                
+                // Extraer la URL de la foto que venimos arrastrando
+                const draggedPhotoUrl = e.dataTransfer.getData('text/plain');
+                if (draggedPhotoUrl) {
+                  handleMovePhoto(draggedPhotoUrl, child.path);
+                }
+              }}
+            >
               <img src={getAlbumCover(child) || ''} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity duration-500" />
-              <div className="absolute inset-0 bg-linear-to-t from-black via-black/10 to-transparent" />
-              <div className="absolute bottom-4 left-4 right-4 text-center">
+              <div className="absolute inset-0 bg-linear-to-t from-black via-black/10 to-transparent pointer-events-none" />
+              <div className="absolute bottom-4 left-4 right-4 text-center pointer-events-none">
                 <div className="text-white font-bold truncate text-sm mb-1">{child.name}</div>
                 <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">{child.photos?.length || 0} fotos</div>
               </div>
             </motion.div>
           ))}
+
+          {/* FOTOS (Arrastrables) */}
           {currentFolder.photos?.map((photo, idx) => (
-            <motion.div layout key={photo.url} className="group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden cursor-zoom-in border border-white/5 shadow-xl" onClick={() => setViewingPhotoIndex(idx)}>
-              <img src={photo.thumb} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
+            <motion.div 
+              layout 
+              key={photo.url} 
+              className="group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden cursor-zoom-in border border-white/5 shadow-xl" 
+              onClick={() => setViewingPhotoIndex(idx)}
+              
+              /* EVENTOS PARA ARRASTRAR */
+              draggable="true"
+              onDragStart={(e) => {
+                e.stopPropagation(); // Evitar comportamientos del padre
+                e.dataTransfer.setData('text/plain', photo.url);
+                e.dataTransfer.effectAllowed = 'move';
+              }}
+            >
+              <img src={photo.thumb} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 pointer-events-none" loading="lazy" />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                <Maximize2 className="text-white" size={20} />
+                <Maximize2 className="text-white pointer-events-none" size={20} />
                 <button onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo); }} className="p-3 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-full transition-all backdrop-blur-sm shadow-xl"><Trash2 size={20} /></button>
               </div>
             </motion.div>
