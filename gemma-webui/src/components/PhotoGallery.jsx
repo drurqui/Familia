@@ -5,6 +5,84 @@ import {
   Home, RefreshCw, Upload, Loader2, Image as ImageIcon,
   FolderPlus, Trash2, AlertCircle, CheckCircle2
 } from 'lucide-react';
+import { 
+  DndContext, PointerSensor, useSensor, useSensors, 
+  useDraggable, useDroppable 
+} from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
+
+// --- SUB-COMPONENTES PARA DRAG & DROP ---
+
+const DroppableFolder = ({ child, onClick, coverUrl }) => {
+  const { isOver, setNodeRef } = useDroppable({
+    id: child.path,
+    data: { type: 'folder', path: child.path }
+  });
+
+  return (
+    <motion.div
+      ref={setNodeRef}
+      whileHover={{ y: -5 }}
+      onClick={onClick}
+      className={`group cursor-pointer bg-zinc-900 rounded-2xl overflow-hidden aspect-4/5 relative border shadow-2xl transition-colors ${
+        isOver ? 'border-blue-500 bg-blue-500/20' : 'border-white/5 hover:border-blue-500/50'
+      }`}
+    >
+      <img src={coverUrl || ''} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity duration-500 pointer-events-none" />
+      <div className="absolute inset-0 bg-linear-to-t from-black via-black/10 to-transparent pointer-events-none" />
+      <div className="absolute bottom-4 left-4 right-4 text-center pointer-events-none">
+        <div className="text-white font-bold truncate text-sm mb-1">{child.name}</div>
+        <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">{child.photos?.length || 0} fotos</div>
+      </div>
+    </motion.div>
+  );
+};
+
+const DraggablePhoto = ({ photo, idx, onZoom, onDelete }) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: photo.url,
+    data: { type: 'photo', url: photo.url }
+  });
+
+  const style = {
+    // Transforma la posición visualmente mientras arrastras sin romper el layout
+    transform: CSS.Translate.toString(transform),
+    zIndex: isDragging ? 50 : 1,
+    opacity: isDragging ? 0.7 : 1,
+  };
+
+  return (
+    <motion.div
+      layout
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden cursor-grab active:cursor-grabbing border border-white/5 shadow-xl"
+      onClick={() => onZoom(idx)}
+    >
+      <img 
+        src={photo.thumb} 
+        draggable={false} 
+        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 pointer-events-none" 
+        loading="lazy" 
+      />
+      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+        <Maximize2 className="text-white pointer-events-none" size={20} />
+        <button 
+          // Es vital usar onPointerDown con stopPropagation para que dnd-kit no intente arrastrar la papelera
+          onPointerDown={(e) => e.stopPropagation()} 
+          onClick={(e) => { e.stopPropagation(); onDelete(photo); }} 
+          className="p-3 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-full transition-all backdrop-blur-sm shadow-xl"
+        >
+          <Trash2 size={20} />
+        </button>
+      </div>
+    </motion.div>
+  );
+};
+
+// --- COMPONENTE PRINCIPAL ---
 
 export default function PhotoGallery() {
   const [rootFolder, setRootFolder] = useState(null);
@@ -14,11 +92,20 @@ export default function PhotoGallery() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [viewingPhotoIndex, setViewingPhotoIndex] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [isDraggingNative, setIsDraggingNative] = useState(false); // Para archivos del Sistema Operativo
   
   const [modal, setModal] = useState({ show: false, title: '', msg: '', type: 'confirm', onConfirm: null });
   const [toast, setToast] = useState({ show: false, msg: '', type: 'success' });
   const fileInputRef = useRef(null);
+
+  // Configuración de los sensores de arrastre
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5, // Hay que mover el ratón 5px para empezar a arrastrar (permite hacer clics normales)
+      },
+    })
+  );
 
   const showToast = (msg, type = 'success') => {
     setToast({ show: true, msg, type });
@@ -74,7 +161,20 @@ export default function PhotoGallery() {
     } finally { setRefreshing(false); }
   };
 
-  // --- FUNCIÓN PARA MOVER FOTOS ---
+  // --- EVENTO PRINCIPAL DE MOVER FOTO ---
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    
+    // Si soltamos algo válido (una foto) sobre algo válido (un álbum)
+    if (over && active.data.current?.type === 'photo' && over.data.current?.type === 'folder') {
+      const sourceUrl = active.id;
+      const targetAlbumPath = over.id;
+      
+      console.log(`Moviendo ${sourceUrl} a ${targetAlbumPath}`);
+      handleMovePhoto(sourceUrl, targetAlbumPath);
+    }
+  };
+
   const handleMovePhoto = async (sourceUrl, targetAlbumPath) => {
     const cleanSourcePath = sourceUrl.split('/media/').pop().replace(/^\/+/, '');
     
@@ -218,15 +318,14 @@ export default function PhotoGallery() {
   );
 
   return (
-    <div className={`p-8 h-full overflow-y-auto custom-scrollbar ${isDragging ? 'bg-blue-500/5' : ''}`}
-      onDragOver={(e) => {e.preventDefault(); setIsDragging(true);}} onDragLeave={() => setIsDragging(false)}
+    <div className={`p-8 h-full overflow-y-auto custom-scrollbar ${isDraggingNative ? 'bg-blue-500/5' : ''}`}
+      // Los eventos nativos se mantienen aquí EXCLUSIVAMENTE para arrastrar archivos del explorador de tu PC
+      onDragOver={(e) => {e.preventDefault(); setIsDraggingNative(true);}} 
+      onDragLeave={() => setIsDraggingNative(false)}
       onDrop={(e) => {
         e.preventDefault(); 
-        setIsDragging(false); 
-        // Si hay archivos arrastrados desde fuera del navegador (subida normal)
-        if (e.dataTransfer.files?.length > 0) {
-          handleFiles(e.dataTransfer.files);
-        }
+        setIsDraggingNative(false); 
+        if (e.dataTransfer.files?.length > 0) handleFiles(e.dataTransfer.files);
       }}>
       
       <div className="max-w-7xl mx-auto">
@@ -256,86 +355,33 @@ export default function PhotoGallery() {
           </div>
         </header>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-6 gap-6">
-          {/* CARPETAS / ÁLBUMES (Receptores de Drag & Drop) */}
-          {currentFolder.children?.map(child => (
-            <motion.div 
-              key={child.path} 
-              whileHover={{ y: -5 }} 
-              onClick={() => setHistory(p => [...p, child])} 
-              className="group cursor-pointer bg-zinc-900 rounded-2xl overflow-hidden aspect-4/5 relative border border-white/5 shadow-2xl hover:border-blue-500/50 transition-colors"
-              
-              /* EVENTOS PARA RECIBIR LA FOTO SOLTADA */
-              onDragEnter={(e) => {
-                e.preventDefault(); 
-                e.stopPropagation();
-              }}
-              onDragOver={(e) => {
-                e.preventDefault(); 
-                e.stopPropagation(); 
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setIsDragging(false);
-                
-                const draggedPhotoUrl = e.dataTransfer.getData('text/plain');
-                console.log("Soltando archivo:", draggedPhotoUrl, "en carpeta:", child.path);
-                
-                if (draggedPhotoUrl) {
-                  handleMovePhoto(draggedPhotoUrl, child.path);
-                }
-              }}
-            >
-              <img src={getAlbumCover(child) || ''} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity duration-500 pointer-events-none" />
-              <div className="absolute inset-0 bg-linear-to-t from-black via-black/10 to-transparent pointer-events-none" />
-              <div className="absolute bottom-4 left-4 right-4 text-center pointer-events-none">
-                <div className="text-white font-bold truncate text-sm mb-1">{child.name}</div>
-                <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">{child.photos?.length || 0} fotos</div>
-              </div>
-            </motion.div>
-          ))}
-
-          {/* FOTOS (Arrastrables) - ¡Framer Motion Eliminado Aquí! */}
-          {currentFolder.photos?.map((photo, idx) => (
-            <div 
-              key={photo.url} 
-              className="group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden cursor-grab active:cursor-grabbing border border-white/5 shadow-xl transition-transform hover:scale-[1.02]" 
-              onClick={() => setViewingPhotoIndex(idx)}
-              
-              /* EVENTOS PARA ARRASTRAR NATIVOS */
-              draggable={true}
-              onDragStart={(e) => {
-                console.log("Agarrando foto:", photo.url);
-                e.dataTransfer.setData('text/plain', photo.url);
-                e.dataTransfer.effectAllowed = 'move';
-                
-                // Opcional: Esto ayuda a que el fantasma se vea un poco transparente
-                e.target.style.opacity = '0.5';
-              }}
-              onDragEnd={(e) => {
-                e.target.style.opacity = '1'; // Restaurar opacidad al soltar
-              }}
-            >
-              <img 
-                src={photo.thumb} 
-                draggable={false} 
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 pointer-events-none" 
-                loading="lazy" 
+        {/* CONTEXTO DE ARRASTRE DE @DND-KIT */}
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-6 gap-6">
+            
+            {/* CARPETAS / ÁLBUMES */}
+            {currentFolder.children?.map(child => (
+              <DroppableFolder 
+                key={child.path} 
+                child={child} 
+                coverUrl={getAlbumCover(child)} 
+                onClick={() => setHistory(p => [...p, child])} 
               />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                <Maximize2 className="text-white pointer-events-none" size={20} />
-                <button 
-                  onMouseDown={(e) => e.stopPropagation()} 
-                  onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo); }} 
-                  className="p-3 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-full transition-all backdrop-blur-sm shadow-xl"
-                >
-                  <Trash2 size={20} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+
+            {/* FOTOS */}
+            {currentFolder.photos?.map((photo, idx) => (
+              <DraggablePhoto 
+                key={photo.url} 
+                photo={photo} 
+                idx={idx} 
+                onZoom={setViewingPhotoIndex} 
+                onDelete={handleDeletePhoto} 
+              />
+            ))}
+
+          </div>
+        </DndContext>
       </div>
 
       {/* MODALES Y TOASTS */}
