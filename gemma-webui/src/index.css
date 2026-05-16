@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+/* Estilos base en CSS estándar */
+body {
+  background-color: #09090b;
+  color: #e2e8f0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar en CSS estándar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  transition: background-color 0.3s;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Markdown de Gemma en CSS estándar */
+.markdown-body {
+  font-size: 0.875rem;
+  line-height: 1.75;
+  color: #cbd5e1;
+}
+.markdown-body p {
+  margin-top: 1.25em;
+  margin-bottom: 1.25em;
+}
+.markdown-body h1, 
+.markdown-body h2, 
+.markdown-body h3, 
+.markdown-body h4 {
+  color: #f8fafc;
+  font-weight: 600;
+  margin-top: 2em;
+  margin-bottom: 1em;
+  line-height: 1.3333333;
+}
+.markdown-body strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+.markdown-body a {
+  color: #60a5fa;
+  text-decoration: underline;
+  font-weight: 500;
+}
+.markdown-body code {
+  color: #93c5fd;
+  background-color: rgba(59, 130, 246, 0.1);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+}
+.markdown-body pre {
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
+  overflow-x: auto;
+}
+.markdown-body pre code {
+  background-color: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: 1em;
+}
+.markdown-body ul {
+  list-style-type: disc;
+  padding-left: 1.625em;
+  margin-top: 1.25em;
+  margin-bottom: 1.25em;
+}
+.markdown-body ol {
+  list-style-type: decimal;
+  padding-left: 1.625em;
+  margin-top: 1.25em;
+  margin-bottom: 1.25em;
+}
+.markdown-body li {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+/* --- ESTILOS PROFESIONALES PARA TABLAS --- */
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+  overflow-x: auto;
+  display: block;
+}
+.markdown-body th {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  color: #f8fafc;
+  text-align: left;
+}
+.markdown-body td {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0.75rem 1rem;
+  color: #cbd5e1;
+}
+.markdown-body tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.02);
+}
