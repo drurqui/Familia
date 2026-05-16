@@ -74,13 +74,12 @@ export default function PhotoGallery() {
     } finally { setRefreshing(false); }
   };
 
-  // --- NUEVA FUNCIÓN PARA MOVER FOTOS ---
+  // --- FUNCIÓN PARA MOVER FOTOS ---
   const handleMovePhoto = async (sourceUrl, targetAlbumPath) => {
     const cleanSourcePath = sourceUrl.split('/media/').pop().replace(/^\/+/, '');
     
     try {
       setRefreshing(true);
-      // Nota: Asumo que en tu Vite config/Nginx mapearás /api/move-photo hacia urquilla-move.py
       const res = await fetch('/api/move-photo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -115,7 +114,6 @@ export default function PhotoGallery() {
       setRefreshing(false);
     }
   };
-  // ---------------------------------------
 
   const handleFiles = async (files) => {
     if (!files?.length) return;
@@ -226,7 +224,7 @@ export default function PhotoGallery() {
       onDrop={(e) => {
         e.preventDefault(); 
         setIsDragging(false); 
-        // Si hay archivos desde el OS (subida normal)
+        // Si hay archivos arrastrados desde fuera del navegador (subida normal)
         if (e.dataTransfer.files?.length > 0) {
           handleFiles(e.dataTransfer.files);
         }
@@ -270,22 +268,21 @@ export default function PhotoGallery() {
               
               /* EVENTOS PARA RECIBIR LA FOTO SOLTADA */
               onDragOver={(e) => {
-                e.preventDefault(); // Permitir soltar
-                e.stopPropagation(); // Evitar que burbujee al contenedor padre
+                e.preventDefault(); 
+                e.stopPropagation(); 
               }}
               onDrop={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 setIsDragging(false);
                 
-                // Extraer la URL de la foto que venimos arrastrando
                 const draggedPhotoUrl = e.dataTransfer.getData('text/plain');
                 if (draggedPhotoUrl) {
                   handleMovePhoto(draggedPhotoUrl, child.path);
                 }
               }}
             >
-              <img src={getAlbumCover(child) || ''} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity duration-500" />
+              <img src={getAlbumCover(child) || ''} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity duration-500 pointer-events-none" />
               <div className="absolute inset-0 bg-linear-to-t from-black via-black/10 to-transparent pointer-events-none" />
               <div className="absolute bottom-4 left-4 right-4 text-center pointer-events-none">
                 <div className="text-white font-bold truncate text-sm mb-1">{child.name}</div>
@@ -299,27 +296,39 @@ export default function PhotoGallery() {
             <motion.div 
               layout 
               key={photo.url} 
-              className="group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden cursor-zoom-in border border-white/5 shadow-xl" 
+              className="group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden cursor-grab active:cursor-grabbing border border-white/5 shadow-xl" 
               onClick={() => setViewingPhotoIndex(idx)}
               
               /* EVENTOS PARA ARRASTRAR */
-              draggable="true"
+              draggable={true}
               onDragStart={(e) => {
-                e.stopPropagation(); // Evitar comportamientos del padre
+                e.stopPropagation(); 
                 e.dataTransfer.setData('text/plain', photo.url);
                 e.dataTransfer.effectAllowed = 'move';
               }}
             >
-              <img src={photo.thumb} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 pointer-events-none" loading="lazy" />
+              <img 
+                src={photo.thumb} 
+                draggable={false} 
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 pointer-events-none" 
+                loading="lazy" 
+              />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
                 <Maximize2 className="text-white pointer-events-none" size={20} />
-                <button onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo); }} className="p-3 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-full transition-all backdrop-blur-sm shadow-xl"><Trash2 size={20} /></button>
+                <button 
+                  onMouseDown={(e) => e.stopPropagation()} 
+                  onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo); }} 
+                  className="p-3 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-full transition-all backdrop-blur-sm shadow-xl"
+                >
+                  <Trash2 size={20} />
+                </button>
               </div>
             </motion.div>
           ))}
         </div>
       </div>
 
+      {/* MODALES Y TOASTS */}
       <AnimatePresence>
         {modal.show && (
           <div className="fixed inset-0 z-210 flex items-center justify-center p-4">
