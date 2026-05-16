@@ -45,15 +45,18 @@ const DraggablePhoto = ({ photo, idx, onZoom, onDelete }) => {
   });
 
   const style = {
-    // Transforma la posición visualmente mientras arrastras sin romper el layout
+    // Transformación que no pelea con Framer Motion
     transform: CSS.Translate.toString(transform),
     zIndex: isDragging ? 50 : 1,
-    opacity: isDragging ? 0.7 : 1,
+    opacity: isDragging ? 0.8 : 1,
+    // CRUCIAL: Evita que Windows/Trackpads cancelen el evento de arrastrar
+    touchAction: 'none', 
   };
 
   return (
     <motion.div
-      layout
+      // LA MAGIA ESTÁ AQUÍ: Apagamos el layout de Framer Motion solo mientras arrastramos
+      layout={!isDragging} 
       ref={setNodeRef}
       style={style}
       {...attributes}
@@ -70,10 +73,10 @@ const DraggablePhoto = ({ photo, idx, onZoom, onDelete }) => {
       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
         <Maximize2 className="text-white pointer-events-none" size={20} />
         <button 
-          // Es vital usar onPointerDown con stopPropagation para que dnd-kit no intente arrastrar la papelera
+          // Bloquea que el botón inicie un arrastre por error
           onPointerDown={(e) => e.stopPropagation()} 
           onClick={(e) => { e.stopPropagation(); onDelete(photo); }} 
-          className="p-3 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-full transition-all backdrop-blur-sm shadow-xl"
+          className="p-3 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-full transition-all backdrop-blur-sm shadow-xl z-10"
         >
           <Trash2 size={20} />
         </button>
@@ -92,17 +95,19 @@ export default function PhotoGallery() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [viewingPhotoIndex, setViewingPhotoIndex] = useState(null);
-  const [isDraggingNative, setIsDraggingNative] = useState(false); // Para archivos del Sistema Operativo
+  
+  // Para subida de archivos nativos desde el PC
+  const [isDraggingNative, setIsDraggingNative] = useState(false); 
   
   const [modal, setModal] = useState({ show: false, title: '', msg: '', type: 'confirm', onConfirm: null });
   const [toast, setToast] = useState({ show: false, msg: '', type: 'success' });
   const fileInputRef = useRef(null);
 
-  // Configuración de los sensores de arrastre
+  // Sensores robustos: Requiere mover 5px para arrastrar (permite clics normales perfectos)
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 5, // Hay que mover el ratón 5px para empezar a arrastrar (permite hacer clics normales)
+        distance: 5, 
       },
     })
   );
@@ -161,16 +166,14 @@ export default function PhotoGallery() {
     } finally { setRefreshing(false); }
   };
 
-  // --- EVENTO PRINCIPAL DE MOVER FOTO ---
+  // --- EVENTO PRINCIPAL DE DND-KIT ---
   const handleDragEnd = (event) => {
     const { active, over } = event;
     
-    // Si soltamos algo válido (una foto) sobre algo válido (un álbum)
+    // Si soltamos una foto sobre un álbum
     if (over && active.data.current?.type === 'photo' && over.data.current?.type === 'folder') {
       const sourceUrl = active.id;
       const targetAlbumPath = over.id;
-      
-      console.log(`Moviendo ${sourceUrl} a ${targetAlbumPath}`);
       handleMovePhoto(sourceUrl, targetAlbumPath);
     }
   };
@@ -319,7 +322,6 @@ export default function PhotoGallery() {
 
   return (
     <div className={`p-8 h-full overflow-y-auto custom-scrollbar ${isDraggingNative ? 'bg-blue-500/5' : ''}`}
-      // Los eventos nativos se mantienen aquí EXCLUSIVAMENTE para arrastrar archivos del explorador de tu PC
       onDragOver={(e) => {e.preventDefault(); setIsDraggingNative(true);}} 
       onDragLeave={() => setIsDraggingNative(false)}
       onDrop={(e) => {
