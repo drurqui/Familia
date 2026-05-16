@@ -90,7 +90,6 @@ export default function PhotoGallery() {
       if (result.status === "success") {
         showToast("Foto movida exitosamente");
         
-        // Actualización optimista de la UI
         setRootFolder(prev => {
           const updateFolderTree = (node) => {
             if (node.path === currentFolder.path) {
@@ -268,7 +267,7 @@ export default function PhotoGallery() {
               
               /* EVENTOS PARA RECIBIR LA FOTO SOLTADA */
               onDragEnter={(e) => {
-                e.preventDefault(); // <-- ESTO FALTABA PARA QUE EL NAVEGADOR ACEPTE EL DROP
+                e.preventDefault(); 
                 e.stopPropagation();
               }}
               onDragOver={(e) => {
@@ -281,16 +280,10 @@ export default function PhotoGallery() {
                 setIsDragging(false);
                 
                 const draggedPhotoUrl = e.dataTransfer.getData('text/plain');
-                
-                // DEPURACIÓN: Verificamos en consola qué estamos soltando
-                console.log("Soltando archivo...");
-                console.log("Origen URL:", draggedPhotoUrl);
-                console.log("Destino Carpeta:", child.path);
+                console.log("Soltando archivo:", draggedPhotoUrl, "en carpeta:", child.path);
                 
                 if (draggedPhotoUrl) {
                   handleMovePhoto(draggedPhotoUrl, child.path);
-                } else {
-                  console.error("No se pudo leer la ruta de la foto arrastrada.");
                 }
               }}
             >
@@ -303,20 +296,25 @@ export default function PhotoGallery() {
             </motion.div>
           ))}
 
-          {/* FOTOS (Arrastrables) */}
+          {/* FOTOS (Arrastrables) - ¡Framer Motion Eliminado Aquí! */}
           {currentFolder.photos?.map((photo, idx) => (
-            <motion.div 
-              layout 
+            <div 
               key={photo.url} 
-              className="group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden cursor-grab active:cursor-grabbing border border-white/5 shadow-xl" 
+              className="group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden cursor-grab active:cursor-grabbing border border-white/5 shadow-xl transition-transform hover:scale-[1.02]" 
               onClick={() => setViewingPhotoIndex(idx)}
               
-              /* EVENTOS PARA ARRASTRAR */
+              /* EVENTOS PARA ARRASTRAR NATIVOS */
               draggable={true}
               onDragStart={(e) => {
-                console.log("Agarrando foto:", photo.url); // DEPURACIÓN
+                console.log("Agarrando foto:", photo.url);
                 e.dataTransfer.setData('text/plain', photo.url);
                 e.dataTransfer.effectAllowed = 'move';
+                
+                // Opcional: Esto ayuda a que el fantasma se vea un poco transparente
+                e.target.style.opacity = '0.5';
+              }}
+              onDragEnd={(e) => {
+                e.target.style.opacity = '1'; // Restaurar opacidad al soltar
               }}
             >
               <img 
@@ -335,7 +333,7 @@ export default function PhotoGallery() {
                   <Trash2 size={20} />
                 </button>
               </div>
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>
