@@ -48,14 +48,16 @@ const DraggablePhoto = ({ photo, idx, onZoom, onDelete }) => {
     transform: CSS.Translate.toString(transform),
     zIndex: isDragging ? 50 : 1,
     opacity: isDragging ? 0.8 : 1,
+    touchAction: 'none', 
   };
 
   return (
     <motion.div
-      layout={!isDragging}
+      layout={!isDragging} 
       ref={setNodeRef}
       style={style}
       className="group relative aspect-square bg-zinc-900 rounded-lg overflow-hidden border border-white/5 shadow-xl"
+      // Quitamos el onClick de Zoom general de aquí para evitar conflictos de dnd-kit
     >
       <img 
         src={photo.thumb} 
@@ -64,31 +66,33 @@ const DraggablePhoto = ({ photo, idx, onZoom, onDelete }) => {
         loading="lazy" 
       />
       
-      {/* OVERLAY SEPARADO EN ZONAS DE ACCIÓN */}
-      <div 
-        className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 cursor-zoom-in"
-        onClick={() => onZoom(idx)} // Clic en cualquier parte del fondo oscuro hace Zoom
-      >
+      {/* OVERLAY CON ÍCONOS DE ACCIÓN INDEPENDIENTES */}
+      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
         
-        {/* BOTÓN DE AGARRE (DRAG HANDLE) - Exclusivo para mover */}
+        {/* BOTÓN ESPECÍFICO PARA ZOOM (LUPA BLANCA) */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onZoom(idx); }} // Solo hace zoom si clicas aquí
+          className="p-3 bg-white/20 hover:bg-white text-white hover:text-black rounded-full backdrop-blur-sm shadow-xl transition-all cursor-zoom-in z-10"
+          title="Agrandar foto"
+        >
+          <Maximize2 size={20} />
+        </button>
+
+        {/* BOTÓN ESPECÍFICO PARA ARRASTRAR (AGARRE AZUL) */}
         <div 
           {...attributes}
           {...listeners}
-          onClick={(e) => e.stopPropagation()} // Evita el zoom al soltar el arrastre
+          // Quitamos StopPropagation de PointerDown para que dnd-kit detecte el arrastre
+          onClick={(e) => e.stopPropagation()} // Evita acciones de fondo al soltar
           className="p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full transition-all shadow-xl cursor-grab active:cursor-grabbing touch-none z-10"
           title="Mantén presionado para arrastrar la foto"
         >
           <Grip size={20} />
         </div>
 
-        {/* ÍCONO DE ZOOM (Solo visual) */}
-        <div className="p-3 bg-white/20 text-white rounded-full backdrop-blur-sm pointer-events-none">
-          <Maximize2 size={20} />
-        </div>
-
-        {/* BOTÓN PARA BORRAR */}
+        {/* BOTÓN ESPECÍFICO PARA BORRAR (BASURERO ROJO) */}
         <button 
-          onPointerDown={(e) => e.stopPropagation()} 
+          onPointerDown={(e) => e.stopPropagation()} // Importante para dnd-kit sensor
           onClick={(e) => { e.stopPropagation(); onDelete(photo); }} 
           className="p-3 bg-red-600/80 hover:bg-red-600 text-white rounded-full transition-all backdrop-blur-sm shadow-xl z-10"
           title="Eliminar foto"
@@ -112,12 +116,14 @@ export default function PhotoGallery() {
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [viewingPhotoIndex, setViewingPhotoIndex] = useState(null);
   
+  // Para subida de archivos nativos desde el PC
   const [isDraggingNative, setIsDraggingNative] = useState(false); 
   
   const [modal, setModal] = useState({ show: false, title: '', msg: '', type: 'confirm', onConfirm: null });
   const [toast, setToast] = useState({ show: false, msg: '', type: 'success' });
   const fileInputRef = useRef(null);
 
+  // Sensores robustos: Requiere mover 5px para arrastrar (permite clics normales perfectos)
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -184,9 +190,12 @@ export default function PhotoGallery() {
   const handleDragEnd = (event) => {
     const { active, over } = event;
     
+    // Si soltamos una foto sobre un álbum
     if (over && active.data.current?.type === 'photo' && over.data.current?.type === 'folder') {
       const sourceUrl = active.id;
       const targetAlbumPath = over.id;
+      
+      console.log(`Moviendo ${sourceUrl} a ${targetAlbumPath}`);
       handleMovePhoto(sourceUrl, targetAlbumPath);
     }
   };
